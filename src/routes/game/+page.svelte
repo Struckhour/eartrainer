@@ -22,7 +22,7 @@
 
   type BeatKey = "beat1" | "beat2" | "beat3" | "beat4";
 
-  let noteScores = {60: 0, 62: 0, 64: 0};
+  let noteScores: Record<number, number> = {60: 0, 62: 0, 64: 0};
 
   type Bar = {
     beat1: number | null;
@@ -63,6 +63,15 @@
     });
   }
 
+  function checkScoresForWin() {
+    for (const key in noteScores) {
+      if (noteScores[key] < 10) return false;
+    }
+    return true;
+  }
+
+  let displayWin = false;
+  let displayLoss = false;
   function responseBar(barNotes: Bar) {
     if (responseInterval) clearInterval(responseInterval);
     let notesPlayed: number[] = [];
@@ -107,7 +116,8 @@
             currentBeatIndex++;
           } else if (notesPlayed.slice(0, currentBeatIndex + 1).includes(note) && newlyPressed.has(note)) {
             console.log(`got beat ${currentBeatIndex + 1}!`);
-            noteScores[note]++;
+            noteScores[note] = Math.min(10, noteScores[note] + 1);
+            
             notesCorrect += 1;
             currentBeatIndex++;
             beatsCorrect[currentBeatIndex] = 1;
@@ -117,7 +127,11 @@
           console.log(`missed beat ${currentBeatIndex + 1}`);
           console.log(lastNote);
           notesFailed += 1;
-          noteScores[lastNote]--;
+          if (lastNote) noteScores[lastNote] = Math.max(-10, noteScores[lastNote] - 1);
+          if (lastNote && noteScores[lastNote] == -10) {
+            displayLoss = true;
+            stopGame();
+          }
           currentBeatIndex++;
         }
       }
@@ -129,6 +143,7 @@
           console.log("You got the whole Bar!!!!");
           barsCorrect += 1;
           score++;
+          if (checkScoresForWin()) displayWin = true;
         } else {
           barsFailed += 1;
           score = Math.max(0, score -1);
@@ -184,12 +199,17 @@
 
 
   async function resetGame() {
+    displayLoss = false;
+    displayWin = false;
     if (!Tone) {
       Tone = (await import("tone"));
     }
     await Tone.start(); 
     console.log("AudioContext started");
-
+    
+    for (const key in noteScores) {
+      noteScores[key] = 0;
+    }
     // Dispose old synths if they exist
     if (backgroundSynth) backgroundSynth.dispose();
     if (synth) synth.dispose();
@@ -275,25 +295,44 @@
 
   });
 
+
 </script>
 
 <main>
   <h1 class="text-center text-4xl mt-6">Melody Duel</h1>
-  <div class="flex flex-col justify-end items-center border border-purple-500 h-[800px] w-[500px] mx-auto">
-    {#if displayCountdown}
-      <div class="text-6xl mb-8 text-blue-800">{count}</div>
-    {/if}
-    <div class="flex w-full justify-around">
+  <div class="flex flex-col justify-between items-center border border-purple-500 h-[800px] w-[500px] mx-auto">
+    <div class="flex justify-between w-full mt-4 px-8">
+      {#if gameTimer}
+      <button onclick={stopGame}  class="bg-red-500 border border-black py-1 px-2 rounded-lg text-xl hover:bg-red-600 active:bg-red-800">Stop</button>
+      {:else}
+      <button onclick={resetGame}  class="bg-green-500 border border-black py-1 px-2 rounded-lg text-xl hover:bg-green-600 active:bg-green-800">New Game</button>
+      {/if}
+      <div class="text-2xl font-bold">
+        {formatTime(Math.floor(beats / 4))}
+      </div>
+    </div>
+    <div class="bg-black w-[90%] h-[400px] relative my-2 rounded-lg">
+      {#if displayCountdown}
+        <div class="text-6xl mb-8 text-blue-800 bg-blue-200 rounded-full absolute top-2/4 left-2/4 -translate-x-2/4 -translate-y-2/4 w-24 h-24 text-center flex items-center justify-center">{count}</div>
+      {/if}
+      {#if displayWin}
+        <div class="text-6xl mb-8 text-blue-800 bg-blue-200 rounded-full absolute top-2/4 left-2/4 -translate-x-2/4 -translate-y-2/4 text-center flex items-center justify-center">You Win!</div>
+      {/if}
+      {#if displayLoss}
+        <div class="text-6xl mb-8 text-blue-800 bg-blue-200 rounded-full absolute top-2/4 left-2/4 -translate-x-2/4 -translate-y-2/4 text-center flex items-center justify-center">Game Over</div>
+      {/if}
+      <div class="rounded-full bg-green-500 w-4 h-4 absolute left-[18%] transition-all duration-700 ease-in-out" style="top: {50 - 5 * noteScores[60]}%"></div>
+      <div class="rounded-full bg-green-500 w-4 h-4 absolute left-[25%] transition-all duration-700 ease-in-out" style="top: {50 - 5 * noteScores[62]}%"></div>
+      <div class="rounded-full bg-green-500 w-4 h-4 absolute left-[32%] transition-all duration-700 ease-in-out" style="top: {50 - 5 * noteScores[64]}%"></div>
+    </div>
+
+    <!-- <div class="flex w-full justify-around">
       <div class="text-4xl">{noteScores[60]}</div>
       <div class="text-4xl">{noteScores[62]}</div>
       <div class="text-4xl">{noteScores[64]}</div>
-    </div>
-    {#if gameTimer}
-    <button onclick={stopGame}  class="bg-red-500 border border-black py-1 px-2 rounded-lg text-xl hover:bg-red-600 active:bg-red-800">Stop</button>
-    {:else}
-    <button onclick={resetGame}  class="bg-green-500 border border-black py-1 px-2 rounded-lg text-xl hover:bg-green-600 active:bg-green-800">New Game</button>
-    {/if}
-    <div class="flex flex-row justify-around w-full text-xl">
+    </div> -->
+
+    <!-- <div class="flex flex-row justify-around w-full text-xl">
       <div class="flex flex-col">
         <div>Bars Correct: {barsCorrect}</div>
         <div>Notes Correct: {notesCorrect}</div>
@@ -302,10 +341,8 @@
         <div>Bars Failed: {barsFailed}</div>
         <div>Notes Failed: {notesFailed}</div>
       </div>
-    </div>
-    <div class="text-2xl font-bold">
-        {formatTime(Math.floor(beats / 4))}
-    </div>
+    </div> -->
+
 
     <Keyboard
     onKeyDown={synth ? noteOn : () => {}}
