@@ -22,6 +22,8 @@
 
   type BeatKey = "beat1" | "beat2" | "beat3" | "beat4";
 
+  let noteScores = {60: 0, 62: 0, 64: 0};
+
   type Bar = {
     beat1: number | null;
     beat2: number | null;
@@ -76,7 +78,7 @@
     ];
 
     let currentBeatIndex = 0; // pointer to the beat we are currently checking
-
+    let lastNote: number | null = 0;
     responseInterval = setInterval(() => {
       // record new notes
       if (notesPlayed.length < beatKeys.length && newlyPressed.size > 0) {
@@ -92,19 +94,20 @@
         clearInterval(responseInterval);
         return;
       }
-
+      
       // Only check the current beat
       if (currentBeatIndex < beatKeys.length) {
         const [start, end] = beatWindows[currentBeatIndex];
         if (msTicks >= start && msTicks <= end) {
           const key = beatKeys[currentBeatIndex];
           const note = barNotes[key];
-
+          lastNote = note;
           if (note === null) {
             console.log(`beat ${currentBeatIndex + 1} skipped (null note)`);
             currentBeatIndex++;
           } else if (notesPlayed.slice(0, currentBeatIndex + 1).includes(note) && newlyPressed.has(note)) {
             console.log(`got beat ${currentBeatIndex + 1}!`);
+            noteScores[note]++;
             notesCorrect += 1;
             currentBeatIndex++;
             beatsCorrect[currentBeatIndex] = 1;
@@ -112,7 +115,9 @@
         } else if (msTicks > end) {
           // time window passed without correct note
           console.log(`missed beat ${currentBeatIndex + 1}`);
+          console.log(lastNote);
           notesFailed += 1;
+          noteScores[lastNote]--;
           currentBeatIndex++;
         }
       }
@@ -240,8 +245,6 @@
       // Every 8 beats, play a new bar
       if (beats % 32 === 0) {
         bar = await playBar();
-        console.log("Completed bar:", bar, beats);
-        console.log("usable bar: ", bar, beats);
         responseBar(bar);
       }
 
@@ -280,7 +283,11 @@
     {#if displayCountdown}
       <div class="text-6xl mb-8 text-blue-800">{count}</div>
     {/if}
-    <div class="text-4xl">{score}</div>
+    <div class="flex w-full justify-around">
+      <div class="text-4xl">{noteScores[60]}</div>
+      <div class="text-4xl">{noteScores[62]}</div>
+      <div class="text-4xl">{noteScores[64]}</div>
+    </div>
     {#if gameTimer}
     <button onclick={stopGame}  class="bg-red-500 border border-black py-1 px-2 rounded-lg text-xl hover:bg-red-600 active:bg-red-800">Stop</button>
     {:else}
