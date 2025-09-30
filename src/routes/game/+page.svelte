@@ -12,7 +12,7 @@
   let gameTimer: number | NodeJS.Timeout;
   let responseInterval: number | NodeJS.Timeout;
 
-  let legalNotes = [60, 62, 64];
+  let legalNotes = [60, 62, 64, 65, 67];
   let score = 0;
   const sixteenth = 150;
   let barsCorrect = 0;
@@ -22,7 +22,7 @@
 
   type BeatKey = "beat1" | "beat2" | "beat3" | "beat4";
 
-  let noteScores: Record<number, number> = {60: 0, 62: 0, 64: 0};
+  let noteScores: Record<number, number> = {60: 0, 62: 0, 64: 0, 65: 0, 67: 0};
 
   type Bar = {
     beat1: number | null;
@@ -311,9 +311,9 @@
         {formatTime(Math.floor(beats / 4))}
       </div>
     </div>
-    <div class="bg-black w-[90%] h-[400px] relative my-2 rounded-lg">
+    <div class="bg-black w-[90%] h-[400px] relative my-2 rounded-lg text-blue-800">
       {#if displayCountdown}
-        <div class="text-6xl mb-8 text-blue-800 bg-blue-200 rounded-full absolute top-2/4 left-2/4 -translate-x-2/4 -translate-y-2/4 w-24 h-24 text-center flex items-center justify-center">{count}</div>
+        <div class="text-6xl mb-8 text-blue-800 z-10 bg-blue-200 rounded-full absolute top-2/4 left-2/4 -translate-x-2/4 -translate-y-2/4 w-24 h-24 text-center flex items-center justify-center">{count}</div>
       {/if}
       {#if displayWin}
         <div class="text-6xl mb-8 text-blue-800 bg-blue-200 rounded-full absolute top-2/4 left-2/4 -translate-x-2/4 -translate-y-2/4 text-center flex items-center justify-center">You Win!</div>
@@ -321,9 +321,11 @@
       {#if displayLoss}
         <div class="text-6xl mb-8 text-blue-800 bg-blue-200 rounded-full absolute top-2/4 left-2/4 -translate-x-2/4 -translate-y-2/4 text-center flex items-center justify-center">Game Over</div>
       {/if}
-      <div class="rounded-full bg-green-500 w-4 h-4 absolute left-[18%] transition-all duration-700 ease-in-out" style="top: {50 - 5 * noteScores[60]}%"></div>
-      <div class="rounded-full bg-green-500 w-4 h-4 absolute left-[25%] transition-all duration-700 ease-in-out" style="top: {50 - 5 * noteScores[62]}%"></div>
-      <div class="rounded-full bg-green-500 w-4 h-4 absolute left-[32%] transition-all duration-700 ease-in-out" style="top: {50 - 5 * noteScores[64]}%"></div>
+      <div class="rounded-full bg-green-300 flex justify-center items-center w-6 h-6 absolute left-[18%] transition-all duration-700 ease-in-out" style="top: {50 - 5 * noteScores[60]}%">Do</div>
+      <div class="rounded-full bg-green-300 flex justify-center items-center w-6 h-6 absolute left-[26%] transition-all duration-700 ease-in-out" style="top: {50 - 5 * noteScores[62]}%">Re</div>
+      <div class="rounded-full bg-green-300 flex justify-center items-center w-6 h-6 absolute left-[34%] transition-all duration-700 ease-in-out" style="top: {50 - 5 * noteScores[64]}%">Mi</div>
+      <div class="rounded-full bg-green-300 flex justify-center items-center w-6 h-6 absolute left-[42%] transition-all duration-700 ease-in-out" style="top: {50 - 5 * noteScores[65]}%">Fa</div>
+      <div class="rounded-full bg-green-300 flex justify-center items-center w-6 h-6 absolute left-[50%] transition-all duration-700 ease-in-out" style="top: {50 - 5 * noteScores[67]}%">So</div>
     </div>
 
     <!-- <div class="flex w-full justify-around">

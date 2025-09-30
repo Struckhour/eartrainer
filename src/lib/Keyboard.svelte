@@ -69,6 +69,7 @@
 .keyboard-wrapper {
   position: relative;
   height: 150px;
+  width: 100%;
 }
 
 /* Base keyboard */
@@ -80,7 +81,7 @@
 
 /* White keys */
 .key.white {
-  width: 40px;
+  width: 12.5%;
   height: 150px;
   border: 1px solid black;
   background: white;
@@ -94,7 +95,7 @@
 
 /* Black keys */
 .key.black {
-  width: 30px;
+  width: 8%;
   height: 100px;
   background: black;
   color: white;
@@ -116,9 +117,9 @@
 }
 
 /* Position black keys correctly over white keys */
-.key.black:nth-of-type(2)  { left: 30px; }  /* C# */
-.key.black:nth-of-type(4)  { left: 70px; }  /* D# */
-.key.black:nth-of-type(7)  { left: 150px; } /* F# */
-.key.black:nth-of-type(9)  { left: 190px; } /* G# */
-.key.black:nth-of-type(11) { left: 230px; } /* A# */
+.key.black:nth-of-type(2)  { left: 12%; }  /* C# */
+.key.black:nth-of-type(4)  { left: 25%; }  /* D# */
+.key.black:nth-of-type(7)  { left: 50%; } /* F# */
+.key.black:nth-of-type(9)  { left: 62%; } /* G# */
+.key.black:nth-of-type(11) { left: 75%; } /* A# */
 </style>
