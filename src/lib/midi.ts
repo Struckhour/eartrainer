@@ -7,7 +7,7 @@ export async function initMIDI(onMessage: (message: Uint8Array) => void) {
   const access = await navigator.requestMIDIAccess();
 
   // Listen to all MIDI inputs
-  for (let input of access.inputs.values()) {
+  for (const input of access.inputs.values()) {
     input.onmidimessage = (event) => {
       onMessage(event.data);
     };

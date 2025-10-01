@@ -1,5 +1,6 @@
 <script lang="ts">
   import Keyboard from "$lib/Keyboard.svelte";
+  import GearIcon from '$lib/assets/gear_icon.svg';
   // import { initMIDI } from "$lib/midi";
   import { onMount, onDestroy } from "svelte";
   // import * as Tone from "tone";
@@ -309,6 +310,9 @@
       {/if}
       <div class="text-2xl font-bold">
         {formatTime(Math.floor(beats / 4))}
+      </div>
+      <div class="w-8 h-8 text-gray-500">
+        <img src={GearIcon} alt="Gear" />
       </div>
     </div>
     <div class="bg-black w-[90%] h-[400px] relative my-2 rounded-lg text-blue-800">
