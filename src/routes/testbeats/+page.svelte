@@ -131,8 +131,29 @@
   let scheduledEvents: number[] = []; // store IDs of scheduled events
   let scheduledBassEvents: number[] = [];
 
+  function getRandomEighthNoteBar(): string[] {
+    const bar: string[] = [];
+    const eighthNotes = 8;
+    let prob = 0.8;
+    for (let i = 0; i < eighthNotes; i++) {
+      if (i == 0) {
+        prob = 1;
+      } else if (i % 2 === 0) {
+        prob = 0.95;
+      } else {
+        prob = 0.3;
+      }
+      if (Math.random() < prob) {
+        bar.push("note"); // note played
+      } else {
+        bar.push("rest"); // rest
+      }
+    }
 
-  function getFourStepNotes(notes: number[]): number[] {
+    return bar;
+  }
+
+  function getStepNotes(notes: number[], length: number): number[] {
     if (notes.length === 0) return [];
 
     const sorted = [...notes].sort((a, b) => a - b);
@@ -142,7 +163,7 @@
     let index = Math.floor(Math.random() * sorted.length);
     sequence.push(sorted[index]);
 
-    for (let i = 1; i < 4; i++) {
+    for (let i = 1; i < length; i++) {
       // Possible moves: stay, move left (-1), move right (+1)
       const moves: number[] = [];
       if (index > 0) moves.push(index - 1);
@@ -159,12 +180,21 @@
 
 
   function scheduleTwoBars(scheduleBar: number, time: number) {
-    const sequence = getFourStepNotes($legalNotes);
+    const rhythm = getRandomEighthNoteBar();
+    const noteCount = rhythm.filter(item => item === "note").length;
+    const sequence = getStepNotes($legalNotes, noteCount);
     let nextNotes: ExpectedNote[] = [];
-    for (let i in sequence) {
-      const generatedNoteTime: string = `${scheduleBar}:${i}:0`;
-      const playNoteTime: string = `${scheduleBar + 1}:${i}:0`;
-      nextNotes.push({note: sequence[i], heardTime: generatedNoteTime, playTime: playNoteTime, done: false})
+    let beat = -1;
+    let sixteenth = 0;
+    let seqIndex = 0;
+    for (let i in rhythm) {
+      if ((parseInt(i) % 2) == 0) {beat += 1; sixteenth = 0;} else {sixteenth = 2;}
+      if (rhythm[i] === 'note') {
+        const generatedNoteTime: string = `${scheduleBar}:${beat}:${sixteenth}`;
+        const playNoteTime: string = `${scheduleBar + 1}:${beat}:${sixteenth}`;
+        nextNotes.push({note: sequence[seqIndex], heardTime: generatedNoteTime, playTime: playNoteTime, done: false})
+        seqIndex++;
+      }
     }
         //add the game notes
     nextNotes.forEach(noteData => {
@@ -639,7 +669,7 @@
   <!-- <div class="text-white">
     {noteScores[60]}
   </div> -->
-  {#if introOn || gameOn}
+  {#if false && (introOn || gameOn)}
     <div class="mx-auto text-xl text-blue-500 h-8">{borderOn ? "Play!" : "Listen"} {!borderOn && gameOn ? `${listenCount}`: ''}{gameOn ? '' : 'to "Do"'}</div>
   {:else}
     <div class="mx-auto h-8"></div>
