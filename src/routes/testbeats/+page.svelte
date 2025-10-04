@@ -286,7 +286,7 @@
     console.log("decscore: ", decrementScore);
     menuOn = false;
     
-    console.log(noteScores);
+    console.log(noteScores, $legalNotes, "expectedNotes: ", expectedNotes);
 
     if (firstStart || resetGame) {
       console.log()
@@ -389,18 +389,20 @@
       }, "16n");
     }
     if (firstStart || resetGame) hatLoop.start(initialOffset);
-
     // Loop for checking if expected notes have been played
-    if (firstStart) {
-      scheduleRepeat = Tone.Transport.scheduleRepeat((time: number) => {
+    if (firstStart || resetGame) {
+      scheduleRepeat = Tone.Transport.scheduleRepeat(() => {
         // const now = Tone.Transport.seconds;
+        // console.log(Tone.Transport.position);
+        // console.log(expectedNotes);
         for (const expected of expectedNotes) {
           const playTimeInSeconds = Tone.Time(expected.playTime).toSeconds() + Tone.Time(initialOffset).toSeconds();
-          if (time - playTimeInSeconds + hitWindow < 0) break;
-          if (!expected.done && time - playTimeInSeconds > hitWindow) {
+          const now = Tone.Transport.seconds;
+          if (now - playTimeInSeconds + hitWindow < 0) break;
+          if (!expected.done && now - playTimeInSeconds > hitWindow) {
             expected.done = true; // mark as processed
             // console.log("Missed note:", expected.note, "at ", now);
-  
+            console.log("decrementing score because note: ", expected, "at time: ", Tone.Transport.position);
             noteScores[expected.note] = Math.max(-7, noteScores[expected.note] - decrementScore);
             notesWrong[expected.note] += 1;
             hotStreak = 0;
@@ -436,7 +438,7 @@
     scheduledEvents.forEach(id => Tone.Transport.clear(id));
     scheduledEvents = [];
 
-    if (firstStart) {
+    if (firstStart || resetGame) {
       Tone.Transport.scheduleRepeat((time: number) => {
         const [barStr] = Tone.Transport.position.split(":"); // "4:0:0" → ["4", ...]
         const currentBar = parseInt(barStr);
@@ -464,12 +466,13 @@
     // 1️⃣ Stop and cancel Transport
     Tone.Transport.stop();
     Tone.Transport.position = 0;
+    Tone.Transport.cancel();
     // 2️⃣ Stop and dispose loops
     if (beatLoop) { beatLoop.stop(); }
     if (hatLoop) { hatLoop.stop(); }
 
-    scheduledEvents.forEach(id => Tone.Transport.clear(id));
-    scheduledEvents = [];
+    // scheduledEvents.forEach(id => Tone.Transport.clear(id));
+    // scheduledEvents = [];
     // 6️⃣ Reset your state
     resetGame = true;
     beatOn = false;
@@ -482,8 +485,7 @@
     gameOn = false;
     introOn = false;
     borderOn = false;
-    scheduleRepeat = null;
-    console.log("Beat fully stopped and reset.");
+    console.log("Beat fully stopped and reset.", noteScores, resetGame, expectedNotes);
   }
 
 
