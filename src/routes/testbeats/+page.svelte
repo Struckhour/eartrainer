@@ -6,6 +6,28 @@
   import Explosion from "./Explosion.svelte";
   import { noteStats, statTotals } from "./stats"
 
+
+  let wrongBars: WrongBar[] = [];
+  // let wrongBarIndex: number | null = null;
+
+  let allScheduledBars: ScheduledBar[] = [];
+
+  type ScheduledBar = {
+    playBar: number;
+    sequence: number[];
+    rhythm: string[];
+    success: true;
+    isWrongBar: boolean;
+    wrongBarIndex: number | null;
+  };
+
+  type WrongBar = {
+    sequence: number[];
+    rhythm: string[];
+    fails: number;
+    successes: number;
+  };
+
   type Particle = {
     id: number;
     x: number;
@@ -17,7 +39,7 @@
     explosions = [...explosions, { id: Date.now(), x, y }];
   }
   // import GearIcon from '$lib/assets/gear_icon.svg?component';
-
+  let mistakesWereMade = false;
   let userStats = localStorageStore("userStats", { name: 'Player', rank: 0 });
   let legalNotes = localStorageStore<number[]>("legalNotes", [60, 62, 64, 65]);
   let gameSettings = localStorageStore("settings", { difficulty: 2, tempo: 110});
@@ -180,9 +202,32 @@
 
 
   function scheduleTwoBars(scheduleBar: number, time: number) {
-    const rhythm = getRandomEighthNoteBar();
-    const noteCount = rhythm.filter(item => item === "note").length;
-    const sequence = getStepNotes($legalNotes, noteCount);
+    console.log(wrongBars);
+    let rhythm: string[] = [];
+    let sequence: number[]  = [];
+    let isWrongBar = false;
+    let wrongBarIndex = null;
+
+    const unFixedIndexes = wrongBars
+      .map((wb, i) => (wb.successes < 3 && wb.successes <= wb.fails ? i : -1))
+      .filter(i => i !== -1);
+
+
+    // console.log("scheduling bar: ", scheduleBar, "wrong bars length is: ", wrongBars.length, wrongBars);
+    if ((unFixedIndexes.length > 0) && (Math.random() < .8)) {
+      const unFixedBarIndex = Math.floor(Math.random() * unFixedIndexes.length);
+      wrongBarIndex = unFixedIndexes[unFixedBarIndex];
+
+      console.log("scheduling a wrong bar: ", wrongBarIndex, wrongBars[wrongBarIndex]);
+      const wrongBar = wrongBars[wrongBarIndex];
+      rhythm = wrongBar.rhythm;
+      sequence = wrongBar.sequence;
+      isWrongBar = true;
+    } else {
+      rhythm = getRandomEighthNoteBar();
+      const noteCount = rhythm.filter(item => item === "note").length;
+      sequence = getStepNotes($legalNotes, noteCount);
+    }
     let nextNotes: ExpectedNote[] = [];
     let beat = -1;
     let sixteenth = 0;
@@ -196,6 +241,7 @@
         seqIndex++;
       }
     }
+    allScheduledBars.push({ sequence: sequence, rhythm: rhythm, playBar: scheduleBar + 1, success: true, isWrongBar: isWrongBar, wrongBarIndex: wrongBarIndex});
         //add the game notes
     nextNotes.forEach(noteData => {
         const id = Tone.Transport.schedule((time: number) => {
@@ -313,13 +359,9 @@
 
   async function startBeat() {
     setDifficulty();
-    console.log("decscore: ", decrementScore);
     menuOn = false;
-    
-    console.log(noteScores, $legalNotes, "expectedNotes: ", expectedNotes);
 
     if (firstStart || resetGame) {
-      console.log()
       noteScores = Object.fromEntries(
         Object.entries(allNoteScores).filter(([key]) => $legalNotes.includes(Number(key)))
       );
@@ -335,7 +377,7 @@
         notesWrong[key] = 0;
       }
     }
-    console.log(noteScores);
+
     for (let i in notesDisplay) {
       notesDisplay[i].hide = false;
     }
@@ -419,24 +461,65 @@
       }, "16n");
     }
     if (firstStart || resetGame) hatLoop.start(initialOffset);
+    
+
     // Loop for checking if expected notes have been played
     if (firstStart || resetGame) {
       scheduleRepeat = Tone.Transport.scheduleRepeat(() => {
-        // const now = Tone.Transport.seconds;
-        // console.log(Tone.Transport.position);
-        // console.log(expectedNotes);
+        //check if it is the middle of a computer bar
+        const checkingBar = parseInt(Tone.Transport.position.split(":")[0]);
+        if (checkingBar > 3 && checkingBar % 2 !== 0) {
+          const checkingBeat = parseInt(Tone.Transport.position.split(":")[1]);
+          if (checkingBeat === 1) {
+            const checkingSixteenth = parseInt(Tone.Transport.position.split(":")[2]);
+            if (checkingSixteenth === 2) {
+              const lastPlayBarIndex = allScheduledBars.findIndex(item => item.playBar === (checkingBar - 1));
+              console.log("checking last bar...");
+              if (mistakesWereMade) {
+                console.log("mistakes were made.");
+                //do stuff
+                if (allScheduledBars[lastPlayBarIndex].wrongBarIndex !== null) {
+                  const wrongBarIndex = allScheduledBars[lastPlayBarIndex].wrongBarIndex;
+                  wrongBars[wrongBarIndex].fails += 1;
+                } else {
+                  console.log("pushing bar: ", lastPlayBarIndex, " : ", allScheduledBars[lastPlayBarIndex]);
+                  allScheduledBars[lastPlayBarIndex].isWrongBar = true;
+                  allScheduledBars[lastPlayBarIndex].wrongBarIndex = wrongBars.length;
+                  wrongBars.push({ sequence: allScheduledBars[lastPlayBarIndex].sequence, rhythm: allScheduledBars[lastPlayBarIndex].rhythm, successes: 0, fails: 1});
+                }
+              } else {
+                console.log("mistakes were not made...")
+                if (allScheduledBars[lastPlayBarIndex].wrongBarIndex !== null) {
+                  console.log("...and was a wrong bar: ")
+                  const wrongBarIndex = allScheduledBars[lastPlayBarIndex].wrongBarIndex;
+                  wrongBars[wrongBarIndex].successes += 1;
+                  console.log(wrongBars[wrongBarIndex]);
+                }
+              }
+              mistakesWereMade = false;
+            }
+          }
+        }
+
+        //if it is:
+        //  check mistakesWereMade and assign successes or fails to the proper bar index, using playBarIndex.
+        //  set mistakesWereMade to false
+        //  set the next playBarIndex
+        //
         for (const expected of expectedNotes) {
           const playTimeInSeconds = Tone.Time(expected.playTime).toSeconds() + Tone.Time(initialOffset).toSeconds();
           const now = Tone.Transport.seconds;
           if (now - playTimeInSeconds + hitWindow < 0) break;
-          if (!expected.done && now - playTimeInSeconds > hitWindow) {
-            expected.done = true; // mark as processed
-            // console.log("Missed note:", expected.note, "at ", now);
-            console.log("decrementing score because note: ", expected, "at time: ", Tone.Transport.position);
+          if (!expected.done && (now - playTimeInSeconds > hitWindow)) {
+            expected.done = true;
+
+            // console.log("decrementing score because note: ", expected, "at time: ", Tone.Transport.position);
             noteScores[expected.note] = Math.max(-7, noteScores[expected.note] - decrementScore);
             notesWrong[expected.note] += 1;
             hotStreak = 0;
             hotStreakOn = false;
+            mistakesWereMade = true;
+
             if (checkScoresForLoss()) {
               setTimeout(() => {
                 stopBeat();
@@ -557,6 +640,9 @@
             notesWrong[expected.note] += 1;
             hotStreak = 0;
             hotStreakOn = false;
+
+            mistakesWereMade = true;
+
             if (checkScoresForLoss()) {
               setTimeout(() => {
                 stopBeat();
