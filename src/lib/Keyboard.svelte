@@ -58,6 +58,9 @@
         on:mousedown={() => onKeyDown(note.midi)}
         on:mouseup={() => onKeyUp(note.midi)}
         on:mouseleave={() => onKeyUp(note.midi)}
+        on:touchstart={(e) => { e.preventDefault(); onKeyDown(note.midi); }}
+        on:touchend={(e) => { e.preventDefault(); onKeyUp(note.midi); }}
+        on:touchcancel={(e) => { e.preventDefault(); onKeyUp(note.midi); }}
       >
         {note.name}
       </button>

@@ -43,11 +43,25 @@
   let userStats = localStorageStore("userStats", { name: 'Player', rank: 0 });
   let legalNotes = localStorageStore<number[]>("legalNotes", [60, 62, 64, 65]);
   let gameSettings = localStorageStore("settings", { difficulty: 2, tempo: 110});
+  let instrumentsOn = localStorageStore("instrumentsOn", { bass: true, kick: true, hat: true, snare: true});
+  let gameMode = localStorageStore("gameMode", { mode: 'singleNotes'});
+  let checkInput = true;
+  let stimulusSynthOn = true;
+  let inputTurnOffBar = -10;
 
   function clearUserStats() {
     localStorage.removeItem("userStats");
     userStats = localStorageStore("userStats", { name: 'Player', rank: 0 });
   }
+
+  // let restBarNumber = [4, 10];
+  // let noteBlitzBarNumber = 6;
+  // let doubleNotesBarNumber = 12;
+
+  let gameStages = ['doubleNotes', 'fullBars', 'singleNotes'];
+  let gameStageIndex = 0;
+  let lastGameMode = gameStages[gameStageIndex];
+
 
   function changeUserName() {
     if ($userStats.name == "Player") {
@@ -82,6 +96,7 @@
   let paused = false;
   let synth: any | null = null;
   let reverb: any | null = null;
+  let synthGain: any | null = null;
   let pressed = new Set<number>();
   let scheduleRepeat: any;
 
@@ -118,7 +133,7 @@
   let hotStreakOn = false;
 
   let beatCount = 0;
-  let listenCount = 0;
+
   let borderOn = false;
   let gameOn = false;
   let introOn = false;
@@ -257,46 +272,72 @@
   }
 
 
+  function scheduleSingleNotes(scheduleBar: number, time: number) {
+  
+    const noteCount = 4;
+    const sequence = getStepNotes($legalNotes, noteCount);
+    
+    let nextNotes: ExpectedNote[] = [];
 
-
-
-  function createExpectedNotes() {
-    for (let i = 0; i < songLengthInBars; i++) {
-      if (i > 1 && i % 2 == 0) {
-        for (let j = 0; j < 4; j++) {
-          const generatedNoteTime: string = `${i}:${j}:0`;
-          const playNoteTime: string = `${i + 1}:${j}:0`;
-          expectedNotes.push({note: randomNoteFromArray($legalNotes), heardTime: generatedNoteTime, playTime: playNoteTime, done: false})
-        }
-      };
+    let seqIndex = 0;
+    for (let iBar of [0, 1]) {
+      for (let jBeat of [0, 2]) {
+        const generatedNoteTime: string = `${scheduleBar + iBar}:${jBeat}:0`;
+        const playNoteTime: string = `${scheduleBar + iBar}:${jBeat + 1}:0`;
+        nextNotes.push({note: sequence[seqIndex], heardTime: generatedNoteTime, playTime: playNoteTime, done: false});
+        seqIndex++;
+      }
     }
+
+    allScheduledBars.push({ sequence: sequence, rhythm: [], playBar: scheduleBar + 1, success: true, isWrongBar: false, wrongBarIndex: null});
+
+        //add the game notes
+    nextNotes.forEach(noteData => {
+        const id = Tone.Transport.schedule((time: number) => {
+            stimulusSynth.triggerAttackRelease(
+                Tone.Frequency(noteData.note, "midi").toFrequency(),
+                "8n",
+                time
+            );
+        }, Tone.Time(noteData.heardTime) + Tone.Time(initialOffset));
+        scheduledEvents.push(id);
+    });
+    expectedNotes = expectedNotes.concat(nextNotes);
   }
 
-  function scheduleExpectedNotes() {
-      // Cancel previous schedules
-      scheduledEvents.forEach(id => Tone.Transport.clear(id));
-      scheduledEvents = [];
+  function scheduleRestBar(scheduleBar: number, time: number) {
+    allScheduledBars.push({ sequence: [], rhythm: [], playBar: scheduleBar + 1, success: true, isWrongBar: false, wrongBarIndex: null});
+  }
 
-      //add 4 intro do half notes
-      for (let i = 0; i < 8; i += 2) {
-        const id = Tone.Transport.schedule((t: number) => {
-          stimulusSynth.triggerAttackRelease(Tone.Frequency(60, "midi").toFrequency(), "4n", t);
-        }, Tone.Time(`${0}:${i}:0`) + Tone.Time(initialOffset));
-        
-        scheduledEvents.push(id);
+  function scheduleDoubleNotes(scheduleBar: number, time: number) {
+  
+    const noteCount = 4;
+    const sequence = getStepNotes($legalNotes, noteCount);
+    
+    let nextNotes: ExpectedNote[] = [];
+
+    let seqIndex = 0;
+    for (let iBar of [0, 1]) {
+      for (let jBeat of [0, 1]) {
+        const generatedNoteTime: string = `${scheduleBar + iBar}:${jBeat}:0`;
+        const playNoteTime: string = `${scheduleBar + iBar}:${jBeat + 2}:0`;
+        nextNotes.push({note: sequence[seqIndex], heardTime: generatedNoteTime, playTime: playNoteTime, done: false});
+        seqIndex++;
       }
-
-      //add the game notes
-      expectedNotes.forEach(noteData => {
-          const id = Tone.Transport.schedule((time: number) => {
-              stimulusSynth.triggerAttackRelease(
-                  Tone.Frequency(noteData.note, "midi").toFrequency(),
-                  "8n",
-                  time
-              );
-          }, Tone.Time(noteData.heardTime) + Tone.Time(initialOffset));
-          scheduledEvents.push(id);
-      });
+    }
+    allScheduledBars.push({ sequence: sequence, rhythm: [], playBar: scheduleBar + 1, success: true, isWrongBar: false, wrongBarIndex: null});
+        //add the game notes
+    nextNotes.forEach(noteData => {
+        const id = Tone.Transport.schedule((time: number) => {
+            stimulusSynth.triggerAttackRelease(
+                Tone.Frequency(noteData.note, "midi").toFrequency(),
+                "8n",
+                time
+            );
+        }, Tone.Time(noteData.heardTime) + Tone.Time(initialOffset));
+        scheduledEvents.push(id);
+    });
+    expectedNotes = expectedNotes.concat(nextNotes);
   }
 
   function createBassNotes() {
@@ -311,9 +352,9 @@
         if (i % 8 === 0) {
           barNote = "C2";
         } else if ((i - 2) % 8 === 0) {
-          barNote = "A1";
-        } else if ((i - 4) % 8 === 0) {
           barNote = "F1";
+        } else if ((i - 4) % 8 === 0) {
+          barNote = "A1";
         } else if ((i - 6) % 8 === 0) {
           barNote = "G1";
         }
@@ -358,10 +399,11 @@
   }
 
   async function startBeat() {
+    gameMode.update(s => ({ ...s, mode: gameStages[gameStageIndex] }));
     setDifficulty();
     menuOn = false;
-
     if (firstStart || resetGame) {
+      wrongBars = [];
       noteScores = Object.fromEntries(
         Object.entries(allNoteScores).filter(([key]) => $legalNotes.includes(Number(key)))
       );
@@ -414,7 +456,8 @@
         oscillator: { type: "sine" },
         envelope: { attack: 0.01, decay: 0.07, sustain: 0.2, release: 1.5 },
       }).toDestination();
-      reverb = new Tone.Reverb({ decay: 2, wet: 0.2 }).toDestination();
+      synthGain = new Tone.Gain(1).toDestination();
+      reverb = new Tone.Reverb({ decay: 2, wet: 0.2 }).connect(synthGain);
       stimulusSynth = new Tone.PolySynth(Tone.Synth, {
         oscillator: { type: "triangle" },
         volume: -10,
@@ -424,7 +467,6 @@
 
     if (firstStart || resetGame) {
       beatCount = 0;
-      listenCount = 0;
     }
     if (firstStart) {
       beatLoop = new Tone.Loop((time: number) => {
@@ -442,15 +484,35 @@
           introOn = false;
           gameOn = true;
         }
-        if (beatCount > 4 && listenCount > 1) {
-          listenCount = listenCount - 1;
-        } else {
-          listenCount = 4;
-        }
 
         beatCount++;
       }, "4n");
+    }
 
+    // turn instruments on and off and set their volume
+
+    if ($instrumentsOn.bass) {
+      bass.volume.value = -10;
+    } else {
+      bass.volume.value = -Infinity;
+    }
+
+    if ($instrumentsOn.snare) {
+      snare.volume.value = drumVolume;
+    } else {
+      snare.volume.value = -Infinity;
+    }
+
+    if ($instrumentsOn.hat) {
+      hat.volume.value = drumVolume;
+    } else {
+      hat.volume.value = -Infinity;
+    }
+
+    if ($instrumentsOn.kick) {
+      kick.volume.value = drumVolume;
+    } else {
+      kick.volume.value = -Infinity;
     }
 
     if (firstStart || resetGame) beatLoop.start(initialOffset);
@@ -462,22 +524,29 @@
     }
     if (firstStart || resetGame) hatLoop.start(initialOffset);
     
-
+    console.log("gamemode.mode: ", $gameMode.mode);
     // Loop for checking if expected notes have been played
     if (firstStart || resetGame) {
       scheduleRepeat = Tone.Transport.scheduleRepeat(() => {
         //check if it is the middle of a computer bar
         const checkingBar = parseInt(Tone.Transport.position.split(":")[0]);
-        if (checkingBar > 3 && checkingBar % 2 !== 0) {
-          const checkingBeat = parseInt(Tone.Transport.position.split(":")[1]);
+        const checkingBeat = parseInt(Tone.Transport.position.split(":")[1]);
+        const checkingSixteenth = parseInt(Tone.Transport.position.split(":")[2]);
+
+        if (!stimulusSynthOn && (checkingBar > inputTurnOffBar) && (checkingBar % 2 === 0) && (checkingBeat === 3) && (checkingSixteenth > 1)) {
+          console.log("turning stimulusSynth volume back on!");
+          synthGain.gain.rampTo(1, 0.1);
+          stimulusSynthOn = true;
+          checkInput = true;
+        }
+        if (checkInput && (checkingBar > 3) && (checkingBar % 2 === 0)) {
           if (checkingBeat === 1) {
-            const checkingSixteenth = parseInt(Tone.Transport.position.split(":")[2]);
             if (checkingSixteenth === 2) {
               const lastPlayBarIndex = allScheduledBars.findIndex(item => item.playBar === (checkingBar - 1));
               console.log("checking last bar...");
               if (mistakesWereMade) {
                 console.log("mistakes were made.");
-                //do stuff
+
                 if (allScheduledBars[lastPlayBarIndex].wrongBarIndex !== null) {
                   const wrongBarIndex = allScheduledBars[lastPlayBarIndex].wrongBarIndex;
                   wrongBars[wrongBarIndex].fails += 1;
@@ -500,35 +569,31 @@
             }
           }
         }
+        if (checkInput) {
+          for (const expected of expectedNotes) {
+            const playTimeInSeconds = Tone.Time(expected.playTime).toSeconds() + Tone.Time(initialOffset).toSeconds();
+            const now = Tone.Transport.seconds;
+            if (now - playTimeInSeconds + hitWindow < 0) break;
+            if (!expected.done && (now - playTimeInSeconds > hitWindow)) {
+              expected.done = true;
 
-        //if it is:
-        //  check mistakesWereMade and assign successes or fails to the proper bar index, using playBarIndex.
-        //  set mistakesWereMade to false
-        //  set the next playBarIndex
-        //
-        for (const expected of expectedNotes) {
-          const playTimeInSeconds = Tone.Time(expected.playTime).toSeconds() + Tone.Time(initialOffset).toSeconds();
-          const now = Tone.Transport.seconds;
-          if (now - playTimeInSeconds + hitWindow < 0) break;
-          if (!expected.done && (now - playTimeInSeconds > hitWindow)) {
-            expected.done = true;
+              // console.log("decrementing score because note: ", expected, "at time: ", Tone.Transport.position);
+              noteScores[expected.note] = Math.max(-7, noteScores[expected.note] - decrementScore);
+              notesWrong[expected.note] += 1;
+              hotStreak = 0;
+              hotStreakOn = false;
+              mistakesWereMade = true;
 
-            // console.log("decrementing score because note: ", expected, "at time: ", Tone.Transport.position);
-            noteScores[expected.note] = Math.max(-7, noteScores[expected.note] - decrementScore);
-            notesWrong[expected.note] += 1;
-            hotStreak = 0;
-            hotStreakOn = false;
-            mistakesWereMade = true;
-
-            if (checkScoresForLoss()) {
-              setTimeout(() => {
-                stopBeat();
-              }, 0);
-              setTimeout(() => {
-                youLose = true;
-              }, 2000);
-            } 
-            break;
+              if (checkScoresForLoss()) {
+                setTimeout(() => {
+                  stopBeat();
+                }, 0);
+                setTimeout(() => {
+                  youLose = true;
+                }, 2000);
+              } 
+              break;
+            }
           }
         }
   
@@ -542,21 +607,32 @@
 
     //Create and Schedule expectedNotes array (after starting the Transport)
     if (firstStart || resetGame) {
-      // createExpectedNotes();
-      // scheduleExpectedNotes();
       createBassNotes();
       scheduleBassNotes();
     }
 
     scheduledEvents.forEach(id => Tone.Transport.clear(id));
     scheduledEvents = [];
-
+    
     if (firstStart || resetGame) {
       Tone.Transport.scheduleRepeat((time: number) => {
+        console.log("schedule notes to be played for upcoming two bars. It is currently: ", Tone.Transport.position, "and game modes is: ", $gameMode.mode);
         const [barStr] = Tone.Transport.position.split(":"); // "4:0:0" → ["4", ...]
         const currentBar = parseInt(barStr);
-        if (currentBar > 1) scheduleTwoBars(currentBar + 1, time);
-      }, "2m");
+        if (currentBar <= 0) return;
+        if (lastGameMode !== $gameMode.mode) {
+          scheduleRestBar(currentBar + 1, time);
+        } else if ($gameMode.mode === 'fullBars') {
+          scheduleTwoBars(currentBar + 1, time);
+        } else if ($gameMode.mode === 'restBar') {
+          scheduleRestBar(currentBar + 1, time);
+        } else if ($gameMode.mode === 'singleNotes') {
+          scheduleSingleNotes(currentBar + 1, time);
+        } else if ($gameMode.mode === 'doubleNotes') {
+          scheduleDoubleNotes(currentBar + 1, time);
+        }
+        lastGameMode = $gameMode.mode;
+      }, "2m", "1m");
     }
 
     firstStart = false;
@@ -584,9 +660,6 @@
     if (beatLoop) { beatLoop.stop(); }
     if (hatLoop) { hatLoop.stop(); }
 
-    // scheduledEvents.forEach(id => Tone.Transport.clear(id));
-    // scheduledEvents = [];
-    // 6️⃣ Reset your state
     resetGame = true;
     beatOn = false;
     paused = false;
@@ -610,7 +683,8 @@
     synth.triggerAttack(freq); // starts the note
     pressed.add(note);
     newlyPressed.add(note);
-    for (const expected of expectedNotes) {
+    if (checkInput) {
+      for (const expected of expectedNotes) {
         const playTimeInSeconds = Tone.Time(expected.playTime).toSeconds() + Tone.Time(initialOffset).toSeconds();
         if (now - playTimeInSeconds + hitWindow < 0) break;
         if (!expected.done && Math.abs(now - playTimeInSeconds) <= hitWindow) {
@@ -629,8 +703,24 @@
               }
             }
             if (checkScoresForWin()) {
-              stopBeat();
-              youWon = true;
+              gameStageIndex += 1;
+              console.log("gameStageIndex: ", gameStageIndex);
+              if (gameStageIndex === gameStages.length) {
+                stopBeat();
+                youWon = true;
+              } else {
+                expectedNotes = [];
+                wrongBars = [];
+                stimulusSynthOn = false;
+                console.log("turning stimulus Synth volume off");
+                synthGain.gain.rampTo(0, 0.1);
+                checkInput = false;
+                inputTurnOffBar = parseInt(Tone.Transport.position.split(":")[0]);
+                for (const key in noteScores) {
+                  noteScores[key] = 0;
+                }
+                gameMode.update(s => ({ ...s, mode: gameStages[gameStageIndex] }));
+              }
             }
             break;
           } else {
@@ -650,14 +740,14 @@
               setTimeout(() => {
                 youLose = true;
               }, 2000);
-            } 
+            }
             break;
           }
         }
       }
-
+    }
       // remove processed notes
-      expectedNotes = expectedNotes.filter(n => !n.done);
+    expectedNotes = expectedNotes.filter(n => !n.done);
     pressed = new Set(pressed);
   }
 
@@ -752,15 +842,15 @@
       <img src={GearIcon} alt="Gear" class="w-full h-full" />
     </button>
   </div>
-  <!-- <div class="text-white">
-    {noteScores[60]}
-  </div> -->
-  {#if false && (introOn || gameOn)}
-    <div class="mx-auto text-xl text-blue-500 h-8">{borderOn ? "Play!" : "Listen"} {!borderOn && gameOn ? `${listenCount}`: ''}{gameOn ? '' : 'to "Do"'}</div>
-  {:else}
-    <div class="mx-auto h-8"></div>
-  {/if}
-  <div class="bg-black w-full box-border h-[400px] relative my-2 rounded-lg text-blue-80" style="border: {borderOn ? '4px' : '4px'} solid {borderOn ? 'green' : 'darkgreen'};">
+
+
+
+
+
+
+
+  <!-- GAME BOARD -->
+  <div class="bg-black w-full box-border h-[400px] relative my-2 rounded-lg text-blue-80" style="border: 4px solid {borderOn ? '#00FF7F' : 'darkgreen'};">
     
     {#if displayCountdown}
       <div class="text-6xl mb-8 text-blue-800 z-10 bg-blue-200 rounded-full absolute top-2/4 left-2/4 -translate-x-2/4 -translate-y-2/4 w-24 h-24 text-center flex items-center justify-center">{count}</div>
@@ -822,6 +912,18 @@
     {pressed}
   />
 
+
+
+
+
+
+
+
+
+
+
+
+
   <!-- STATISTICS BOARD -->
   {#if youWon || youLose}
   <div class="text-2xl absolute z-50 w-[90%] top-[15%] left-2/4 -translate-x-2/4 bg-green-800/90 text-slate-200 border border-slate-200 flex flex-col justify-around items-center">
@@ -850,9 +952,20 @@
   </div>
   {/if}
 
+
+
+
+
+
+
+
+
+
+
+
     <!-- Menu -->
   {#if menuOn}
-  <div class="text-2xl text-black absolute z-50 w-[90%] top-[15%] left-2/4 -translate-x-2/4 bg-slate-300 border-4 border-slate-500 rounded-xl flex flex-col justify-around items-center">
+  <div class="text-2xl text-black absolute z-50 w-[90%] top-[10%] left-2/4 -translate-x-2/4 bg-slate-300 border-4 border-slate-500 rounded-xl flex flex-col justify-around items-center">
     <div class="my-2">Settings</div>
     <hr class="border-t-2 border-gray-400 my-4 w-full">
     <div class="text-lg">Notes</div>
@@ -865,9 +978,9 @@
     <hr class="border-t-2 border-gray-400 my-4 w-full">
     <div class="text-lg">Tempo</div>
     <div class="flex justify-around w-full">
-      <button on:click={() => updateTempo(80)} class="my-1 px-1 rounded-lg hover:bg-green-500 {$gameSettings.tempo == 80 ? 'outline outline-black bg-green-400' : 'text-slate-600'}">Slow</button>
-      <button on:click={() => updateTempo(110)} class="my-1 px-1 rounded-lg hover:bg-green-500 {$gameSettings.tempo == 110 ? 'outline outline-black bg-green-400' : 'text-slate-600'}">Medium</button>
-      <button on:click={() => updateTempo(140)} class="my-1 px-1 rounded-lg hover:bg-green-500 {$gameSettings.tempo == 140 ? 'outline outline-black bg-green-400' : 'text-slate-600'}">Fast</button>
+      <button on:click={() => updateTempo(80)} class="my-1 px-1 rounded-lg hover:bg-blue-500 {$gameSettings.tempo == 80 ? 'outline outline-black bg-blue-400' : 'text-slate-600'}">Slow</button>
+      <button on:click={() => updateTempo(100)} class="my-1 px-1 rounded-lg hover:bg-blue-500 {$gameSettings.tempo == 100 ? 'outline outline-black bg-blue-400' : 'text-slate-600'}">Medium</button>
+      <button on:click={() => updateTempo(120)} class="my-1 px-1 rounded-lg hover:bg-blue-500 {$gameSettings.tempo == 120 ? 'outline outline-black bg-blue-400' : 'text-slate-600'}">Fast</button>
     </div>
     <div>{$gameSettings.tempo} bpm</div>
     <hr class="border-t-2 border-gray-400 my-4 w-full">
@@ -878,7 +991,18 @@
       <button on:click={() => updateDifficulty(3)} class="my-1 px-1 rounded-lg hover:bg-green-500 {$gameSettings.difficulty == 3 ? 'outline outline-black bg-green-400' : 'text-slate-600'}">Hard</button>
       <button on:click={() => updateDifficulty(4)} class="my-1 px-1 rounded-lg hover:bg-green-500 {$gameSettings.difficulty == 4 ? 'outline outline-black bg-green-400' : 'text-slate-600'}">Legendary</button>
     </div>
+        <hr class="border-t-2 border-gray-400 my-4 w-full">
+    
+    <div class="text-lg">Background Instruments</div>
+    <div class="flex justify-around w-full">
+      <button on:click={() => instrumentsOn.update(s => ({ ...s, kick: !$instrumentsOn.kick }))} class="my-1 px-1 rounded-lg hover:bg-blue-500 {$instrumentsOn.kick ? 'outline outline-black bg-blue-400' : 'text-slate-600'}">Kick</button>
+      <button on:click={() => instrumentsOn.update(s => ({ ...s, snare: !$instrumentsOn.snare }))} class="my-1 px-1 rounded-lg hover:bg-blue-500 {$instrumentsOn.snare ? 'outline outline-black bg-blue-400' : 'text-slate-600'}">Snare</button>
+      <button on:click={() => instrumentsOn.update(s => ({ ...s, hat: !$instrumentsOn.hat }))} class="my-1 px-1 rounded-lg hover:bg-blue-500 {$instrumentsOn.hat ? 'outline outline-black bg-blue-400' : 'text-slate-600'}">Hat</button>
+      <button on:click={() => instrumentsOn.update(s => ({ ...s, bass: !$instrumentsOn.bass }))} class="my-1 px-1 rounded-lg hover:bg-blue-500 {$instrumentsOn.bass  ? 'outline outline-black bg-blue-400' : 'text-slate-600'}">Bass</button>
+    </div>
+
     <hr class="border-t-2 border-gray-400 my-4 w-full">
+    
     <div>
       <button on:click={changeUserName}>Change Name: {$userStats.name}</button>
       <button on:click={updateUserRank}>Change Rank: {$userStats.rank}</button>
